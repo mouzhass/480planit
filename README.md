@@ -6,7 +6,6 @@ It takes trip details (destination, season, duration, weather, activities, etc.)
 ---
 
 ## 📂 Project Structure
-
 480planit/
 │── data/ # Input data
 │ ├── trip_scenarios.xlsx # Training examples (trip details + items)
@@ -26,7 +25,6 @@ It takes trip details (destination, season, duration, weather, activities, etc.)
 
 
 ## ⚙️ Setup:
-
 1. Clone the repository:
 git clone https://github.com/mouzhass/480planit.git
 
@@ -41,16 +39,22 @@ pip install -r requirements.txt
 Example requirements.txt:
 
 torch
+
 numpy
+
 pandas
+
 scikit-learn
 openpyxl
+
 
 ## 🏋️ Training the Model
 python src/train_trip_mlp.py
 
 -Reads data/trip_scenarios.xlsx
+
 -Trains a multilabel classifier (MLP)
+
 -Saves artifacts (model, preprocessor, labels) to artifacts/
 
 ## 🔮 Making Predictions
