@@ -16,7 +16,9 @@ git clone https://github.com/mouzhass/480planit.git
 
 2. Create a virtual environment:            
 python -m venv .venv
+
 source .venv/bin/activate   # Mac/Linux
+
 .venv\Scripts\activate      # Windows
 
 3. Install dependencies:
