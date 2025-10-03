@@ -6,22 +6,8 @@ It takes trip details (destination, season, duration, weather, activities, etc.)
 ---
 
 ## 📂 Project Structure
-480planit/
-│── data/ # Input data
-│ ├── trip_scenarios.xlsx # Training examples (trip details + items)
-│ ├── ItemCatalog.xlsx # Master list of items with categories
-│
-│── src/ # Source code
-│ ├── train_trip_mlp.py # Train the MLP model
-│ ├── predict_example.py # Run predictions for a sample trip
-│
-│── artifacts/ # Saved training results
-│ ├── model.pt
-│ ├── preprocessor.pkl
-│ ├── labels.json
-│
-│── .gitignore
-│── README.md
+<img width="471" height="328" alt="image" src="https://github.com/user-attachments/assets/786233e8-d99e-4964-9df2-c24e79b9cd0c" />
+
 
 
 ## ⚙️ Setup:
