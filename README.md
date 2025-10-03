@@ -21,17 +21,6 @@ git clone https://github.com/mouzhass/480planit.git
 3. Install dependencies:
 pip install -r requirements.txt
 
-Example requirements.txt:
-
-torch
-
-numpy
-
-pandas
-
-scikit-learn
-openpyxl
-
 
 ## 🏋️ Training the Model
 python src/train_trip_mlp.py
