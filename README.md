@@ -37,6 +37,7 @@ source .venv/bin/activate   # Mac/Linux
 
 3. Install dependencies:
 pip install -r requirements.txt
+
 Example requirements.txt:
 
 torch
