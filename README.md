@@ -15,10 +15,8 @@ It takes trip details (destination, season, duration, weather, activities, etc.)
 git clone https://github.com/mouzhass/480planit.git
 
 2. Create a virtual environment:            
+<img width="289" height="72" alt="image" src="https://github.com/user-attachments/assets/d0834f61-2119-4fb8-8bb6-825b97ccfd39" />
 
-python -m venv .venv
-source .venv/bin/activate   # Mac/Linux
-.venv\Scripts\activate      # Windows
 
 3. Install dependencies:
 pip install -r requirements.txt
