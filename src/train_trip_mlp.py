@@ -1,216 +1,142 @@
-import json
-import pickle
-import numpy as np
 import pandas as pd
-from pathlib import Path
-
+import numpy as np
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, MultiLabelBinarizer
+from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
+import pickle
 
-from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.metrics import f1_score, precision_score, recall_score
+# Load Excel files
+trip_df = pd.read_excel("../data/trip_scenarios_clean.xlsx")
+catalog_df = pd.read_excel("../data/ItemCatalog_clean.xlsx")
 
+# Standardize column names
+trip_df.columns = trip_df.columns.str.strip().str.lower()
+catalog_df.columns = catalog_df.columns.str.strip().str.lower()
 
-# -------------------------
-# Paths
-# -------------------------
-BASE_DIR = Path(__file__).resolve().parent.parent   # project root
-DATA_DIR = BASE_DIR / "data"
+# Parse 'items' column into lists
+trip_df["items"] = trip_df["items"].apply(
+    lambda x: [int(i.strip()) for i in str(x).split(",") if i.strip().isdigit()]
+)
 
-TRIP_PATH = DATA_DIR / "trip_scenarios.xlsx"
-CATALOG_PATH = DATA_DIR / "ItemCatalog.xlsx"
+# Define feature columns
+categorical_cols = ["destination", "season", "weather", "activities"]
 
+# Only use columns that exist
+categorical_cols = [c for c in categorical_cols if c in trip_df.columns]
 
-# -------------------------
-# Helpers
-# -------------------------
-def norm_item(s: str) -> str:
-    return str(s).strip().lower()
+# intended numeric columns
+intended_numeric_cols = [
+    "duration_days", "avg_temp_high", "avg_temp_low",
+    "rain_chance_percent", "humidity_percent", "uv_index", "altitude_m"
+]
 
+# Filter to existing numeric columns
+numeric_cols = [col for col in intended_numeric_cols if col in trip_df.columns]
+print("Using numeric columns:", numeric_cols)
 
-def parse_item_list(cell):
-    if pd.isna(cell):
-        return []
-    s = str(cell)
-    for sep in ['|', ';', ',']:
-        if sep in s:
-            return [norm_item(p) for p in s.split(sep) if str(p).strip()]
-    return [norm_item(s)] if s.strip() else []
+# Encode categorical and numeric data
+encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
 
+# Encode only if categorical_cols exist
+if categorical_cols:
+    encoded_cats = encoder.fit_transform(trip_df[categorical_cols])
+    encoded_cat_cols = encoder.get_feature_names_out(categorical_cols)
+else:
+    encoded_cats = np.zeros((len(trip_df), 0))
+    encoded_cat_cols = []
 
-def detect_items_target(trip_df, catalog_items):
-    """
-    Build target Y (multi-hot matrix of items).
-    Always uses human-readable item names, ignores raw numeric IDs.
-    """
-    candidates = [c for c in trip_df.columns if any(k in str(c).lower()
-                                                    for k in ["item", "packed", "bring", "included"])]
-    items_col = None
-    for c in candidates:
-        if trip_df[c].dtype == object:
-            items_col = c
-            break
+# Scale numeric features
+scaler = StandardScaler()
+scaled_nums = scaler.fit_transform(trip_df[numeric_cols])
 
-    if items_col is not None:
-        scenario_items = trip_df[items_col].apply(parse_item_list)
-
-        # Start with catalog items (already names)
-        all_items = set(catalog_items)
-
-        # Add extra from scenarios, but skip if it's just digits
-        for lst in scenario_items:
-            for it in lst:
-                if it and not it.isdigit():
-                    all_items.add(it)
-
-        y_labels = sorted(all_items)  # final label names
-        y = np.zeros((len(trip_df), len(y_labels)), dtype=np.float32)
-        idx = {it: i for i, it in enumerate(y_labels)}
-        for r, lst in enumerate(scenario_items):
-            for it in lst:
-                if it in idx:
-                    y[r, idx[it]] = 1.0
-        return y, y_labels, items_col
-
-    # fallback: many boolean columns
-    bool_cols = [c for c in trip_df.columns if str(trip_df[c].dtype) in ["bool", "boolean"]]
-    if bool_cols:
-        y = trip_df[bool_cols].astype(float).values
-        return y, bool_cols, None
-
-    raise RuntimeError("No valid items column found in trip_scenarios.xlsx")
+# Combine both feature sets
+X = np.concatenate([scaled_nums, encoded_cats], axis=1)
 
 
-def build_preprocessor(trip_df, drop_cols):
-    X = trip_df.drop(columns=drop_cols, errors="ignore").copy()
-    cat_cols = [c for c in X.columns if not pd.api.types.is_numeric_dtype(X[c])]
-    num_cols = [c for c in X.columns if pd.api.types.is_numeric_dtype(X[c])]
-
-    pre = ColumnTransformer(
-        transformers=[
-            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat_cols) if cat_cols else ("cat", "drop", []),
-            ("num", StandardScaler(), num_cols) if num_cols else ("num", "drop", []),
-        ],
-        remainder="drop"
-    )
-    return pre, cat_cols, num_cols
+# Multi-label encode items
+mlb = MultiLabelBinarizer(classes=catalog_df["id"].tolist())
+Y = mlb.fit_transform(trip_df["items"])
 
 
-# -------------------------
-# MLP Model
-# -------------------------
-class MLPMultiLabel(nn.Module):
-    def __init__(self, input_dim, hidden=128, output_dim=1):
+# Train/test split
+
+X_train, X_test, Y_train, Y_test = train_test_split(
+    X, Y, test_size=0.2, random_state=42
+)
+
+# Convert to PyTorch tensors
+X_train = torch.tensor(X_train, dtype=torch.float32)
+Y_train = torch.tensor(Y_train, dtype=torch.float32)
+X_test = torch.tensor(X_test, dtype=torch.float32)
+Y_test = torch.tensor(Y_test, dtype=torch.float32)
+
+train_loader = DataLoader(TensorDataset(X_train, Y_train), batch_size=16, shuffle=True)
+
+
+# Define the MLP model
+class TripItemMLP(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden),
+            nn.Linear(input_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden, hidden // 2),
-            nn.ReLU(),
-            nn.Linear(hidden // 2, output_dim)
+            nn.Linear(hidden_size, output_size)
         )
 
     def forward(self, x):
         return self.net(x)
 
-
-# -------------------------
-# Main
-# -------------------------
-def main():
-    # Load Excel files
-    trip_df = pd.read_excel(TRIP_PATH, sheet_name=0)
-    catalog_df = pd.read_excel(CATALOG_PATH, sheet_name=0)
-
-    # catalog items
-    name_cols = [c for c in catalog_df.columns if any(k in str(c).lower() for k in ["item", "name", "title"])]
-    cat_name_col = name_cols[0] if name_cols else catalog_df.columns[0]
-    catalog_items = [norm_item(x) for x in catalog_df[cat_name_col].astype(str).fillna("") if str(x).strip()]
-
-    # build targets
-    y, y_labels, items_col = detect_items_target(trip_df, catalog_items)
-
-    # build features
-    drop_cols = [items_col] if items_col else y_labels
-    pre, cat_cols, num_cols = build_preprocessor(trip_df, drop_cols)
-    X_processed = pre.fit_transform(trip_df.drop(columns=drop_cols, errors="ignore"))
-
-    # feature names
-    feature_names = []
-    if cat_cols:
-        ohe = pre.named_transformers_["cat"]
-        if hasattr(ohe, "get_feature_names_out"):
-            feature_names.extend(ohe.get_feature_names_out(cat_cols).tolist())
-    if num_cols:
-        feature_names.extend(num_cols)
-
-    # split
-    X_train, X_test, y_train, y_test = train_test_split(X_processed, y, test_size=0.2, random_state=42)
-
-    # tensors
-    X_train_t = torch.tensor(X_train, dtype=torch.float32)
-    y_train_t = torch.tensor(y_train, dtype=torch.float32)
-    X_test_t = torch.tensor(X_test, dtype=torch.float32)
-    y_test_t = torch.tensor(y_test, dtype=torch.float32)
-
-    # model
-    input_dim = X_train.shape[1]
-    output_dim = y_train.shape[1]
-    model = MLPMultiLabel(input_dim=input_dim, hidden=128, output_dim=output_dim)
-
-    crit = nn.BCEWithLogitsLoss()
-    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-
-    # train
-    loader = DataLoader(TensorDataset(X_train_t, y_train_t), batch_size=128, shuffle=True)
-    EPOCHS = 20
-    for ep in range(EPOCHS):
-        model.train()
-        total = 0.0
-        for xb, yb in loader:
-            logits = model(xb)
-            loss = crit(logits, yb)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            total += loss.item() * xb.size(0)
-        print(f"Epoch {ep+1:02d}/{EPOCHS} | loss {total/len(X_train_t):.4f}")
-
-    # eval
-    model.eval()
-    with torch.no_grad():
-        logits = model(X_test_t).cpu().numpy()
-    probs = 1 / (1 + np.exp(-logits))
-    preds = (probs >= 0.5).astype(int)
-
-    metrics = {
-        "micro_f1": float(f1_score(y_test, preds, average="micro", zero_division=0)),
-        "macro_f1": float(f1_score(y_test, preds, average="macro", zero_division=0)),
-        "micro_precision": float(precision_score(y_test, preds, average="micro", zero_division=0)),
-        "micro_recall": float(recall_score(y_test, preds, average="micro", zero_division=0)),
-        "n_train": int(X_train.shape[0]),
-        "n_test": int(X_test.shape[0]),
-        "n_features": int(input_dim),
-        "n_labels": int(output_dim),
-    }
-    print("Final Metrics:", json.dumps(metrics, indent=2))
-
-    # save artifacts
-    outdir = BASE_DIR / "artifacts"
-    outdir.mkdir(exist_ok=True)
-    torch.save(model.state_dict(), outdir / "model.pt")
-    with open(outdir / "preprocessor.pkl", "wb") as f:
-        pickle.dump(pre, f)
-    with open(outdir / "labels.json", "w") as f:
-        json.dump(y_labels, f, indent=2)   # <-- always human-readable names
-    with open(outdir / "feature_names.json", "w") as f:
-        json.dump(feature_names, f, indent=2)
-
-    print("Artifacts saved in", outdir)
+# Initialize model
+model = TripItemMLP(
+    input_size=X_train.shape[1],
+    hidden_size=128,
+    output_size=Y_train.shape[1]
+)
 
 
-if __name__ == "__main__":
-    main()
+# Training setup
+criterion = nn.BCEWithLogitsLoss()   # multi-label loss
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+num_epochs = 25
+
+
+# Train loop
+for epoch in range(num_epochs):
+    model.train()
+    total_loss = 0
+    for X_batch, Y_batch in train_loader:
+        optimizer.zero_grad()
+        outputs = model(X_batch)
+        loss = criterion(outputs, Y_batch)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+
+    if (epoch + 1) % 5 == 0:
+        print(f"Epoch [{epoch+1}/{num_epochs}] | Loss: {total_loss/len(train_loader):.4f}")
+
+#Evaluate model
+model.eval()
+with torch.no_grad():
+    preds = torch.sigmoid(model(X_test))
+    preds_binary = (preds > 0.5).float()
+    accuracy = (preds_binary == Y_test).float().mean()
+    print(f"\n Test Accuracy: {accuracy:.4f}")
+
+
+# Save model + preprocessors-
+torch.save(model.state_dict(), "trip_item_mlp.pth")
+
+with open("preprocessors.pkl", "wb") as f:
+    pickle.dump({
+        "encoder": encoder,
+        "scaler": scaler,
+        "mlb": mlb,
+        "categorical_cols": categorical_cols,
+        "numeric_cols": numeric_cols
+    }, f)
+
+print("\nModel and preprocessors saved successfully!")
+
