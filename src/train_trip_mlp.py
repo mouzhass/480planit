@@ -8,8 +8,8 @@ from torch.utils.data import TensorDataset, DataLoader
 import pickle
 
 # Load Excel files
-trip_df = pd.read_excel("../data/trip_scenarios_clean.xlsx")
-catalog_df = pd.read_excel("../data/ItemCatalog_clean.xlsx")
+trip_df = pd.read_excel("./data/trip_scenarios_clean.xlsx")
+catalog_df = pd.read_excel("./data/ItemCatalog_clean.xlsx")
 
 # Standardize column names
 trip_df.columns = trip_df.columns.str.strip().str.lower()
@@ -127,9 +127,9 @@ with torch.no_grad():
 
 
 # Save model + preprocessors-
-torch.save(model.state_dict(), "trip_item_mlp.pth")
+torch.save(model.state_dict(), "./models/trained_trip_item_mlp.pth")
 
-with open("preprocessors.pkl", "wb") as f:
+with open("./models/preprocessors.pkl", "wb") as f:
     pickle.dump({
         "encoder": encoder,
         "scaler": scaler,
