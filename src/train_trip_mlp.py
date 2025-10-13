@@ -1,24 +1,51 @@
 import pandas as pd
 import numpy as np
+import re
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MultiLabelBinarizer
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 import pickle
+import re
+import os
 
 # Load Excel files
 trip_df = pd.read_excel("./data/trip_scenarios_clean.xlsx")
 catalog_df = pd.read_excel("./data/ItemCatalog_clean.xlsx")
 
-# Standardize column names
+# Standardize column names early so later code can rely on them
 trip_df.columns = trip_df.columns.str.strip().str.lower()
 catalog_df.columns = catalog_df.columns.str.strip().str.lower()
 
-# Parse 'items' column into lists
-trip_df["items"] = trip_df["items"].apply(
-    lambda x: [int(i.strip()) for i in str(x).split(",") if i.strip().isdigit()]
-)
+# The trip dataset stores item names (text) separated by '|' — map those names to catalog ids.
+def normalize_name(s: str) -> str:
+    s = str(s).lower()
+    # replace slashes with space, remove parentheses and punctuation except alphanumeric and spaces
+    s = s.replace('/', ' ')
+    s = re.sub(r"[^a-z0-9 ]+", ' ', s)
+    s = re.sub(r"\s+", ' ', s).strip()
+    return s
+
+# build mapping from normalized catalog name -> list of ids (handle duplicate names)
+catalog_df['name_norm'] = catalog_df['name'].apply(normalize_name)
+name_to_ids = catalog_df.groupby('name_norm')['id'].apply(list).to_dict()
+
+def map_item_names_to_ids(cell):
+    # split by '|' (dataset uses |) and map each token to one or more ids
+    parts = [p.strip() for p in str(cell).split('|') if p.strip()]
+    ids = []
+    for p in parts:
+        norm = normalize_name(p)
+        if norm in name_to_ids:
+            ids.extend([int(i) for i in name_to_ids[norm]])
+        else:
+            # not found in catalog; ignore or log — here we ignore
+            pass
+    # deduplicate
+    return sorted(set(ids))
+
+trip_df["items"] = trip_df["items"].apply(map_item_names_to_ids)
 
 # Define feature columns
 categorical_cols = ["destination", "season", "weather", "activities"]
@@ -56,14 +83,16 @@ X = np.concatenate([scaled_nums, encoded_cats], axis=1)
 
 
 # Multi-label encode items
-mlb = MultiLabelBinarizer(classes=catalog_df["id"].tolist())
+# Ensure catalog ids are ints and provide them as ordered class list to the binarizer
+catalog_ids = catalog_df['id'].astype(int).tolist()
+mlb = MultiLabelBinarizer(classes=catalog_ids)
 Y = mlb.fit_transform(trip_df["items"])
 
 
-# Train/test split
-
-X_train, X_test, Y_train, Y_test = train_test_split(
-    X, Y, test_size=0.2, random_state=42
+# Keep row indices so we can map test rows back to the original dataframe for CSV output
+indices = np.arange(X.shape[0])
+X_train, X_test, Y_train, Y_test, idx_train, idx_test = train_test_split(
+    X, Y, indices, test_size=0.2, random_state=42
 )
 
 # Convert to PyTorch tensors
@@ -71,6 +100,9 @@ X_train = torch.tensor(X_train, dtype=torch.float32)
 Y_train = torch.tensor(Y_train, dtype=torch.float32)
 X_test = torch.tensor(X_test, dtype=torch.float32)
 Y_test = torch.tensor(Y_test, dtype=torch.float32)
+# keep a numpy copy of test targets and indices for CSV/export
+Y_test_np_for_export = Y_test.numpy()
+idx_test_for_export = idx_test
 
 train_loader = DataLoader(TensorDataset(X_train, Y_train), batch_size=16, shuffle=True)
 
@@ -103,6 +135,7 @@ num_epochs = 25
 
 
 # Train loop
+print("Starting training...")
 for epoch in range(num_epochs):
     model.train()
     total_loss = 0
@@ -113,11 +146,10 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-
-    if (epoch + 1) % 5 == 0:
-        print(f"Epoch [{epoch+1}/{num_epochs}] | Loss: {total_loss/len(train_loader):.4f}")
+    print(f"Epoch [{epoch+1}] | Loss: {total_loss/len(train_loader):.4f}")
 
 #Evaluate model
+print("\nStarting evaluation...")
 model.eval()
 with torch.no_grad():
     preds = torch.sigmoid(model(X_test))
@@ -125,6 +157,56 @@ with torch.no_grad():
     accuracy = (preds_binary == Y_test).float().mean()
     print(f"\n Test Accuracy: {accuracy:.4f}")
 
+
+# --- Prepare CSV output of predictions for inspection/evaluation ---
+preds_np = preds.numpy()
+preds_binary_np = preds_binary.numpy()
+
+# Inverse-transform true labels back to item ids (lists)
+true_items_list = mlb.inverse_transform(Y_test_np_for_export)
+
+# Get class ids (as stored in the mlb) corresponding to columns
+class_ids = list(mlb.classes_)
+
+# Build a simple human-readable summary for each test sample
+rows = []
+top_k = 10
+for i, orig_idx in enumerate(idx_test_for_export):
+    probs = preds_np[i]
+    bin_preds = preds_binary_np[i]
+
+    # predicted item ids (binary)
+    predicted_items = [int(class_ids[j]) for j in np.where(bin_preds == 1)[0]]
+
+    # top-k predictions with probabilities
+    topk_idx = np.argsort(-probs)[:top_k]
+    topk_pairs = [f"{int(class_ids[j])}:{probs[j]:.3f}" for j in topk_idx]
+
+    rows.append({
+        "orig_row": int(orig_idx),
+        "true_items": ";".join(map(str, true_items_list[i])) if len(true_items_list[i])>0 else "",
+        "predicted_items": ";".join(map(str, predicted_items)) if predicted_items else "",
+        "topk_predictions": ";".join(topk_pairs),
+    })
+
+results_df = pd.DataFrame(rows)
+
+# Optionally join some original trip info for easier inspection (if available)
+try:
+    # add a few original columns if they exist
+    add_cols = [c for c in ["destination", "season", "weather"] if c in trip_df.columns]
+    if add_cols:
+        # align by original dataframe index
+        meta = trip_df.loc[results_df["orig_row"], add_cols].reset_index(drop=True)
+        results_df = pd.concat([results_df, meta], axis=1)
+except Exception:
+    pass
+
+# ensure models dir exists and save CSV
+os.makedirs("./models", exist_ok=True)
+csv_path = "./models/predictions.csv"
+results_df.to_csv(csv_path, index=False)
+print(f"\nSaved prediction results to: {csv_path}")
 
 # Save model + preprocessors-
 torch.save(model.state_dict(), "./models/trained_trip_item_mlp.pth")
