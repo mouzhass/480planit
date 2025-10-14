@@ -168,6 +168,9 @@ true_items_list = mlb.inverse_transform(Y_test_np_for_export)
 # Get class ids (as stored in the mlb) corresponding to columns
 class_ids = list(mlb.classes_)
 
+# build id -> name mapping from catalog for human-readable output
+id_to_name = {int(r['id']): r['name'] for _, r in catalog_df.iterrows()}
+
 # Build a simple human-readable summary for each test sample
 rows = []
 top_k = 10
@@ -178,15 +181,25 @@ for i, orig_idx in enumerate(idx_test_for_export):
     # predicted item ids (binary)
     predicted_items = [int(class_ids[j]) for j in np.where(bin_preds == 1)[0]]
 
+    # map ids to human-readable names
+    true_names = [id_to_name.get(int(i), str(i)) for i in true_items_list[i]]
+    predicted_names = [id_to_name.get(int(i), str(i)) for i in predicted_items]
+
     # top-k predictions with probabilities
     topk_idx = np.argsort(-probs)[:top_k]
     topk_pairs = [f"{int(class_ids[j])}:{probs[j]:.3f}" for j in topk_idx]
 
+    # also build topk name:prob pairs
+    topk_name_pairs = [f"{id_to_name.get(int(class_ids[j]), class_ids[j])}:{probs[j]:.3f}" for j in topk_idx]
+
     rows.append({
         "orig_row": int(orig_idx),
         "true_items": ";".join(map(str, true_items_list[i])) if len(true_items_list[i])>0 else "",
+        "true_item_names": ";".join(true_names) if true_names else "",
         "predicted_items": ";".join(map(str, predicted_items)) if predicted_items else "",
+        "predicted_item_names": ";".join(predicted_names) if predicted_names else "",
         "topk_predictions": ";".join(topk_pairs),
+        "topk_predictions_names": ";".join(topk_name_pairs),
     })
 
 results_df = pd.DataFrame(rows)
