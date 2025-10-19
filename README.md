@@ -28,10 +28,3 @@ python src/train_trip_mlp.py
 -Reads data/trip_scenarios.xlsx
 
 -Trains a multilabel classifier (MLP)
-
--Saves artifacts (model, preprocessor, labels) to artifacts/
-
-## 🔮 Making Predictions
-
-python src/predict_example.py
-
