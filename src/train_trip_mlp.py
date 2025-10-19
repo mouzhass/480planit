@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import re
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MultiLabelBinarizer
 from sklearn.model_selection import train_test_split
 import torch
@@ -11,8 +10,8 @@ import re
 import os
 
 # Load Excel files
-trip_df = pd.read_excel("./data/trip_scenarios_clean.xlsx")
-catalog_df = pd.read_excel("./data/ItemCatalog_clean.xlsx")
+trip_df = pd.read_excel("../data/trip_scenarios_clean.xlsx")
+catalog_df = pd.read_excel("../data/ItemCatalog_clean.xlsx")
 
 # Standardize column names early so later code can rely on them
 trip_df.columns = trip_df.columns.str.strip().str.lower()
