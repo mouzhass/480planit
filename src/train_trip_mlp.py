@@ -104,7 +104,7 @@ Y_test = torch.tensor(Y_test, dtype=torch.float32)
 Y_test_np_for_export = Y_test.numpy()
 idx_test_for_export = idx_test
 
-train_loader = DataLoader(TensorDataset(X_train, Y_train), batch_size=16, shuffle=True)
+train_loader = DataLoader(TensorDataset(X_train, Y_train), batch_size=8, shuffle=True)
 
 
 # Define the MLP model
@@ -155,7 +155,7 @@ print("\nStarting evaluation...")
 model.eval()
 with torch.no_grad():
     preds = torch.sigmoid(model(X_test))
-    preds_binary = (preds > 0.5).float()
+    preds_binary = (preds > 0.65).float()
     accuracy = (preds_binary == Y_test).float().mean()
     print(f"\n Test Accuracy: {accuracy:.4f}")
 
@@ -175,7 +175,7 @@ id_to_name = {int(r['id']): r['name'] for _, r in catalog_df.iterrows()}
 
 # Build a simple human-readable summary for each test sample
 rows = []
-top_k = 10
+top_10 = 10
 for i, orig_idx in enumerate(idx_test_for_export):
     probs = preds_np[i]
     bin_preds = preds_binary_np[i]
@@ -188,11 +188,11 @@ for i, orig_idx in enumerate(idx_test_for_export):
     predicted_names = [id_to_name.get(int(i), str(i)) for i in predicted_items]
 
     # top-k predictions with probabilities
-    topk_idx = np.argsort(-probs)[:top_k]
-    topk_pairs = [f"{int(class_ids[j])}:{probs[j]:.3f}" for j in topk_idx]
+    top10_idx = np.argsort(-probs)[:top_10]
+    top10_pairs = [f"{int(class_ids[j])}:{probs[j]:.3f}" for j in top10_idx]
 
     # also build topk name:prob pairs
-    topk_name_pairs = [f"{id_to_name.get(int(class_ids[j]), class_ids[j])}:{probs[j]:.3f}" for j in topk_idx]
+    top10_name_pairs = [f"{id_to_name.get(int(class_ids[j]), class_ids[j])}:{probs[j]:.3f}" for j in top10_idx]
 
     rows.append({
         "orig_row": int(orig_idx),
@@ -200,8 +200,8 @@ for i, orig_idx in enumerate(idx_test_for_export):
         "true_item_names": ";".join(true_names) if true_names else "",
         "predicted_items": ";".join(map(str, predicted_items)) if predicted_items else "",
         "predicted_item_names": ";".join(predicted_names) if predicted_names else "",
-        "topk_predictions": ";".join(topk_pairs),
-        "topk_predictions_names": ";".join(topk_name_pairs),
+        "top10_predictions": ";".join(top10_pairs),
+        "top10_predictions_names": ";".join(top10_name_pairs),
     })
 
 results_df = pd.DataFrame(rows)
