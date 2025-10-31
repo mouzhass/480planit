@@ -11,8 +11,8 @@ import re
 import os
 
 # Load Excel files
-trip_df = pd.read_excel("./data/trip_scenarios_clean.xlsx")
-catalog_df = pd.read_excel("./data/ItemCatalog_clean.xlsx")
+trip_df = pd.read_excel("../data/trip_scenarios_clean.xlsx")
+catalog_df = pd.read_excel("../data/ItemCatalog_clean.xlsx")
 
 # Standardize column names early so later code can rely on them
 trip_df.columns = trip_df.columns.str.strip().str.lower()
@@ -114,7 +114,9 @@ class TripItemMLP(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, output_size)
+            nn.Linear(hidden_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, output_size)
         )
 
     def forward(self, x):
@@ -123,7 +125,7 @@ class TripItemMLP(nn.Module):
 # Initialize model
 model = TripItemMLP(
     input_size=X_train.shape[1],
-    hidden_size=128,
+    hidden_size=256,
     output_size=Y_train.shape[1]
 )
 
@@ -131,7 +133,7 @@ model = TripItemMLP(
 # Training setup
 criterion = nn.BCEWithLogitsLoss()   # multi-label loss
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-num_epochs = 25
+num_epochs = 100
 
 
 # Train loop
@@ -216,15 +218,15 @@ except Exception:
     pass
 
 # ensure models dir exists and save CSV
-os.makedirs("./models", exist_ok=True)
-csv_path = "./models/predictions.csv"
+os.makedirs("../models", exist_ok=True)
+csv_path = "../models/predictions.csv"
 results_df.to_csv(csv_path, index=False)
 print(f"\nSaved prediction results to: {csv_path}")
 
 # Save model + preprocessors-
-torch.save(model.state_dict(), "./models/trained_trip_item_mlp.pth")
+torch.save(model.state_dict(), "../models/trained_trip_item_mlp.pth")
 
-with open("./models/preprocessors.pkl", "wb") as f:
+with open("../models/preprocessors.pkl", "wb") as f:
     pickle.dump({
         "encoder": encoder,
         "scaler": scaler,
