@@ -185,6 +185,11 @@ for i, orig_idx in enumerate(idx_test_for_export):
     # predicted item ids (binary)
     predicted_items = [int(class_ids[j]) for j in np.where(bin_preds == 1)[0]]
 
+    # If no items meet the threshold, use top 5 predictions
+    if len(predicted_items) == 0:
+        top5_idx = np.argsort(-probs)[:5]
+        predicted_items = [int(class_ids[j]) for j in top5_idx]
+
     # map ids to human-readable names
     true_names = [id_to_name.get(int(i), str(i)) for i in true_items_list[i]]
     predicted_names = [id_to_name.get(int(i), str(i)) for i in predicted_items]
