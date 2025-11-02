@@ -104,7 +104,7 @@ Y_test = torch.tensor(Y_test, dtype=torch.float32)
 Y_test_np_for_export = Y_test.numpy()
 idx_test_for_export = idx_test
 
-train_loader = DataLoader(TensorDataset(X_train, Y_train), batch_size=16, shuffle=True)
+train_loader = DataLoader(TensorDataset(X_train, Y_train), batch_size=8, shuffle=True)
 
 
 # Define the MLP model
