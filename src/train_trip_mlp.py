@@ -11,7 +11,7 @@ import re
 import os
 
 # Load Excel files
-trip_df = pd.read_excel("../data/trip_scenarios_clean.xlsx")
+trip_df = pd.read_excel("../data/trip_scenarios_1000_activity_STRICT.xlsx")
 catalog_df = pd.read_excel("../data/ItemCatalog_clean.xlsx")
 
 # Standardize column names early so later code can rely on them
@@ -56,7 +56,7 @@ categorical_cols = [c for c in categorical_cols if c in trip_df.columns]
 # intended numeric columns
 intended_numeric_cols = [
     "duration_days", "avg_temp_high", "avg_temp_low",
-    "rain_chance_percent", "humidity_percent", "uv_index", "altitude_m"
+    "rain_chance_percent", "humidity_percent"
 ]
 
 # Filter to existing numeric columns
@@ -183,6 +183,11 @@ for i, orig_idx in enumerate(idx_test_for_export):
     # predicted item ids (binary)
     predicted_items = [int(class_ids[j]) for j in np.where(bin_preds == 1)[0]]
 
+    # If no items meet the threshold, use top 5 predictions
+    if len(predicted_items) == 0:
+        top5_idx = np.argsort(-probs)[:5]
+        predicted_items = [int(class_ids[j]) for j in top5_idx]
+
     # map ids to human-readable names
     true_names = [id_to_name.get(int(i), str(i)) for i in true_items_list[i]]
     predicted_names = [id_to_name.get(int(i), str(i)) for i in predicted_items]
@@ -209,7 +214,7 @@ results_df = pd.DataFrame(rows)
 # Optionally join some original trip info for easier inspection (if available)
 try:
     # add a few original columns if they exist
-    add_cols = [c for c in ["destination", "season", "weather"] if c in trip_df.columns]
+    add_cols = [c for c in ["destination", "season", "weather", "activities"] if c in trip_df.columns]
     if add_cols:
         # align by original dataframe index
         meta = trip_df.loc[results_df["orig_row"], add_cols].reset_index(drop=True)
@@ -219,7 +224,7 @@ except Exception:
 
 # ensure models dir exists and save CSV
 os.makedirs("../models", exist_ok=True)
-csv_path = "../models/predictions.csv"
+csv_path = "../models/predictions1000_STRICT.csv"
 results_df.to_csv(csv_path, index=False)
 print(f"\nSaved prediction results to: {csv_path}")
 
