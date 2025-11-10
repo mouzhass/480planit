@@ -223,8 +223,8 @@ except Exception:
     pass
 
 # ensure models dir exists and save CSV
-os.makedirs("../models", exist_ok=True)
-csv_path = "../models/predictions1000_STRICT.csv"
+os.makedirs("../data", exist_ok=True)
+csv_path = "../data/predictions1000_STRICT.csv"
 results_df.to_csv(csv_path, index=False)
 print(f"\nSaved prediction results to: {csv_path}")
 
