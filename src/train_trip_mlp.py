@@ -56,7 +56,7 @@ categorical_cols = [c for c in categorical_cols if c in trip_df.columns]
 # intended numeric columns
 intended_numeric_cols = [
     "duration_days", "avg_temp_high", "avg_temp_low",
-    "rain_chance_percent", "humidity_percent", "uv_index", "altitude_m"
+    "rain_chance_percent", "humidity_percent"
 ]
 
 # Filter to existing numeric columns
