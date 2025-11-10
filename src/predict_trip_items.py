@@ -129,15 +129,15 @@ def predict_items(user_trip: dict, threshold: float = 0.65, fallback_topk: int =
 
 if __name__ == "__main__":
     example_trip = {
-        "destination": "Denver, CO",
+        "destination": "New York City, NY",
         "season": "summer",
         "weather": "hot",
-        "activities": "Camping & Hiking, Adventure, Camping",   # must be a single value like in training
-        "duration_days": 4,
-        "avg_temp_high": 78,
-        "avg_temp_low": 65,
-        "rain_chance_percent": 5,
-        "humidity_percent": 35,
+        "activities": "Hiking, Adventure, Camping & Beach, Cruise",   # must be a single value like in training
+        "duration_days": 12,
+        "avg_temp_high": 85,
+        "avg_temp_low": 75,
+        "rain_chance_percent": 90,
+        "humidity_percent": 86,
     }
 
     results = predict_items(example_trip, threshold=0.65, fallback_topk=5)
