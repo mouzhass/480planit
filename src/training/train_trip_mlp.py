@@ -11,8 +11,8 @@ import re
 import os
 
 # Load Excel files
-trip_df = pd.read_excel("../data/trip_scenarios_1000_activity_STRICT.xlsx")
-catalog_df = pd.read_excel("../data/ItemCatalog_clean.xlsx")
+trip_df = pd.read_excel("data/trip_scenarios_1000_activity_STRICT.xlsx")
+catalog_df = pd.read_excel("data/ItemCatalog_clean.xlsx")
 
 # Standardize column names early so later code can rely on them
 trip_df.columns = trip_df.columns.str.strip().str.lower()
@@ -223,15 +223,15 @@ except Exception:
     pass
 
 # ensure models dir exists and save CSV
-os.makedirs("../data", exist_ok=True)
-csv_path = "../data/predictions1000_STRICT.csv"
+os.makedirs("data", exist_ok=True)
+csv_path = "data/predictions1000_STRICT.csv"
 results_df.to_csv(csv_path, index=False)
 print(f"\nSaved prediction results to: {csv_path}")
 
 # Save model + preprocessors-
-torch.save(model.state_dict(), "../models/trained_trip_item_mlp.pth")
+torch.save(model.state_dict(), "models/trained_trip_item_mlp.pth")
 
-with open("../models/preprocessors.pkl", "wb") as f:
+with open("models/preprocessors.pkl", "wb") as f:
     pickle.dump({
         "encoder": encoder,
         "scaler": scaler,
