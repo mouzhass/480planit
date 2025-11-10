@@ -4,6 +4,12 @@ import traceback
 
 app = Flask(__name__)
 
+@app.route("/health", methods=["GET"])
+def health():
+    return [
+        {"status": "ok"}
+    ]
+
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
